@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<title>Chat anônimo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#000; --panel:#000; --ink:#fff; --muted:#9AA3AB; --line:#23272C; --field:#111418;
+  --mine:#2F6F74; --mine-ink:#fff; --theirs:#1B1F24; --danger:#FF8A80;
+  color-scheme: dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{font-family:"Instrument Sans",system-ui,sans-serif;background:var(--bg);color:var(--ink);font-size:16px}
+.app{max-width:640px;height:100dvh;margin:0 auto;background:var(--panel);display:flex;flex-direction:column;
+  border-inline:1px solid var(--line)}
+.hidden{display:none!important}
+header{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line)}
+header h1{font-size:18px;font-weight:600;margin:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+button{font:inherit;cursor:pointer;border:1px solid var(--line);background:transparent;color:var(--ink);
+  padding:9px 14px;border-radius:10px}
+button:disabled{opacity:.6;cursor:default}
+button.primary{background:var(--mine);border-color:var(--mine);color:var(--mine-ink);font-weight:600}
+button:focus-visible,input:focus-visible{outline:2px solid #fff;outline-offset:2px}
+input{font:inherit;width:100%;padding:12px;border-radius:10px;border:1px solid var(--line);
+  background:var(--field);color:var(--ink)}
+input::placeholder{color:var(--muted)}
+.err{color:var(--danger);min-height:1.3em;font-size:14px;margin:6px 0 0}
+.note{color:var(--muted);font-size:14px;line-height:1.45}
+
+/* entrar */
+#login{margin:auto;width:100%;padding:28px 22px}
+#login h1{font-size:32px;font-weight:600;margin:0 0 22px;letter-spacing:-.02em}
+#login .stack{display:grid;gap:10px}
+#login .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+
+/* lista */
+#list{flex:1;overflow:auto}
+.chat-item{display:block;width:100%;text-align:left;border:0;border-bottom:1px solid var(--line);
+  border-radius:0;padding:14px 16px}
+.chat-item b{display:block}
+.chat-item span{color:var(--muted);font-size:14px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.empty{padding:28px 20px}
+
+/* conversa */
+#msgs{flex:1;overflow:auto;padding:14px;display:flex;flex-direction:column;gap:6px}
+.msg{max-width:80%;padding:9px 12px;border-radius:14px;background:var(--theirs);
+  align-self:flex-start;overflow-wrap:anywhere;white-space:pre-wrap}
+.msg.mine{align-self:flex-end;background:var(--mine);color:var(--mine-ink)}
+.msg.has-img{width:min(80%,300px)}
+.msg img{display:block;width:100%;height:auto;border-radius:10px;margin-bottom:4px;cursor:zoom-in}
+.msg small{display:block;opacity:.7;font-size:12px;margin-top:3px}
+.msg .del{all:unset;cursor:pointer;text-decoration:underline;margin-left:8px;font-size:12px}
+.msg .del:focus-visible{outline:2px solid currentColor}
+.composer{display:flex;gap:8px;padding:10px 12px calc(10px + env(safe-area-inset-bottom));border-top:1px solid var(--line)}
+.composer input{flex:1;min-width:0}
+#lightbox{position:fixed;inset:0;background:rgba(0,0,0,.94);display:flex;align-items:center;justify-content:center;
+  z-index:10;cursor:zoom-out}
+#lightbox img{max-width:100%;max-height:100%}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ENTRAR -->
+  <section id="login" class="hidden">
+    <h1>Chat anônimo</h1>
+    <div class="stack">
+      <input id="nick" placeholder="Nick" autocomplete="username" autocapitalize="none" maxlength="20">
+      <input id="pass" type="password" placeholder="Senha" autocomplete="current-password">
+      <div class="row">
+        <button class="primary" id="btnLogin">Entrar</button>
+        <button id="btnRegister">Criar conta</button>
+      </div>
+      <p class="err" id="loginErr" role="alert"></p>
+    </div>
+  </section>
+
+  <!-- CONVERSAS -->
+  <section id="home" class="hidden" style="display:flex;flex-direction:column;flex:1;min-height:0">
+    <header>
+      <h1 id="whoami"></h1>
+      <button id="btnNew" class="primary">Nova conversa</button>
+      <button id="btnOut">Sair</button>
+    </header>
+    <div id="newBox" class="hidden" style="padding:12px 14px;border-bottom:1px solid var(--line)">
+      <div style="display:flex;gap:8px">
+        <input id="otherNick" placeholder="Nick da pessoa" autocapitalize="none" maxlength="20">
+        <button id="btnGo" class="primary">Abrir</button>
+      </div>
+      <p class="err" id="newErr" role="alert"></p>
+    </div>
+    <div id="list"></div>
+  </section>
+
+  <!-- CONVERSA ABERTA -->
+  <section id="room" class="hidden" style="display:flex;flex-direction:column;flex:1;min-height:0">
+    <header>
+      <button id="btnBack" aria-label="Voltar">Voltar</button>
+      <h1 id="roomTitle"></h1>
+    </header>
+    <div id="msgs" aria-live="polite"></div>
+    <div class="composer">
+      <input id="file" type="file" accept="image/*" class="hidden">
+      <button id="btnPhoto" aria-label="Enviar foto">Foto</button>
+      <input id="text" placeholder="Mensagem" maxlength="1000" autocomplete="off">
+      <button id="btnSend" class="primary">Enviar</button>
+    </div>
+  </section>
+
+</div>
+
+<div id="lightbox" class="hidden" role="dialog" aria-label="Foto ampliada"><img id="lbImg" alt=""></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword,
+         onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+import { getFirestore, doc, getDoc, setDoc, addDoc, deleteDoc, collection, query, where,
+         orderBy, limit, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+
+/* ====== CONFIGURAÇÃO DO FIREBASE ====== */
+const firebaseConfig = {
+  apiKey: "AIzaSyB7aWtqSjSa1XdJ7RMnVfqJKWg4dp9kbZU",
+  authDomain: "mystic-4f213.firebaseapp.com",
+  projectId: "mystic-4f213",
+  appId: "1:720635035480:web:3d52aade95328d221baf2d"
+};
+/* ====================================== */
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const $ = id => document.getElementById(id);
+const EMAIL_DOMAIN = "@nick.app";
+const NICK_RE = /^[a-z0-9_]{3,20}$/;
+const IMG_PREFIX = "data:image/jpeg;base64,";
+const IMG_MAX_CHARS = 850000;   // limite do Firestore: ~1 MB por mensagem
+
+let me = null, unsubList = null, unsubMsgs = null, currentChat = null;
+
+function show(view){
+  for (const id of ["login","home","room"]) $(id).classList.toggle("hidden", id !== view);
+}
+const cleanNick = v => v.trim().toLowerCase();
+const chatIdFor = (a,b) => [a,b].sort().join("__");
+
+function authError(e){
+  const c = e.code || "";
+  if (c.includes("email-already-in-use")) return "Esse nick já existe. Escolha outro.";
+  if (c.includes("weak-password")) return "Senha curta demais. Use pelo menos 6 caracteres.";
+  if (c.includes("invalid-credential") || c.includes("wrong-password") || c.includes("user-not-found"))
+    return "Nick ou senha incorretos.";
+  if (c.includes("too-many-requests")) return "Muitas tentativas. Aguarde um pouco e tente de novo.";
+  return "Algo deu errado. Tente novamente.";
+}
+
+function readLogin(){
+  const nick = cleanNick($("nick").value), pass = $("pass").value;
+  if (!NICK_RE.test(nick)) { $("loginErr").textContent = "Nick: 3 a 20 letras minúsculas, números ou _."; return null; }
+  if (pass.length < 6) { $("loginErr").textContent = "A senha precisa de pelo menos 6 caracteres."; return null; }
+  $("loginErr").textContent = "";
+  return { nick, pass };
+}
+
+$("btnRegister").onclick = async () => {
+  const d = readLogin(); if (!d) return;
+  try {
+    const cred = await createUserWithEmailAndPassword(auth, d.nick + EMAIL_DOMAIN, d.pass);
+    await setDoc(doc(db, "users", d.nick), { uid: cred.user.uid, createdAt: serverTimestamp() });
+  } catch (e) { $("loginErr").textContent = authError(e); }
+};
+$("btnLogin").onclick = async () => {
+  const d = readLogin(); if (!d) return;
+  try { await signInWithEmailAndPassword(auth, d.nick + EMAIL_DOMAIN, d.pass); }
+  catch (e) { $("loginErr").textContent = authError(e); }
+};
+$("pass").addEventListener("keydown", e => { if (e.key === "Enter") $("btnLogin").click(); });
+$("btnOut").onclick = () => signOut(auth);
+
+onAuthStateChanged(auth, user => {
+  unsubList?.(); unsubMsgs?.(); currentChat = null;
+  $("pass").value = "";
+  if (!user) { me = null; show("login"); return; }
+  me = user.email.split("@")[0];
+  $("whoami").textContent = me;
+  show("home");
+  const q = query(collection(db, "chats"), where("members", "array-contains", me));
+  unsubList = onSnapshot(q, snap => {
+    const items = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      .sort((a,b) => (b.updatedAt?.seconds ?? 9e12) - (a.updatedAt?.seconds ?? 9e12));
+    renderList(items);
+  });
+});
+
+function renderList(items){
+  const box = $("list"); box.textContent = "";
+  if (!items.length){
+    const p = document.createElement("p");
+    p.className = "note empty";
+    p.textContent = "Nenhuma conversa ainda. Toque em Nova conversa e digite o nick de alguém.";
+    box.append(p); return;
+  }
+  for (const c of items){
+    const other = c.members.find(m => m !== me) || me;
+    const b = document.createElement("button");
+    b.className = "chat-item";
+    const n = document.createElement("b"); n.textContent = other;
+    const s = document.createElement("span"); s.textContent = c.lastText || "";
+    b.append(n, s);
+    b.onclick = () => openChat(other);
+    box.append(b);
+  }
+}
+
+$("btnNew").onclick = () => { $("newBox").classList.toggle("hidden"); $("newErr").textContent = ""; $("otherNick").focus(); };
+$("btnGo").onclick = async () => {
+  const other = cleanNick($("otherNick").value);
+  if (!NICK_RE.test(other)) { $("newErr").textContent = "Nick inválido."; return; }
+  if (other === me) { $("newErr").textContent = "Você não pode conversar consigo mesmo."; return; }
+  try {
+    const u = await getDoc(doc(db, "users", other));
+    if (!u.exists()) { $("newErr").textContent = "Esse nick não existe."; return; }
+    $("otherNick").value = ""; $("newBox").classList.add("hidden");
+    openChat(other);
+  } catch { $("newErr").textContent = "Não foi possível verificar o nick."; }
+};
+
+function openChat(other){
+  currentChat = { id: chatIdFor(me, other), other };
+  $("roomTitle").textContent = other;
+  $("msgs").textContent = "";
+  show("room");
+  unsubMsgs?.();
+  // pega as 100 mais recentes (ordem decrescente) e inverte na hora de mostrar
+  const q = query(collection(db, "chats", currentChat.id, "messages"), orderBy("createdAt", "desc"), limit(100));
+  unsubMsgs = onSnapshot(q, snap => renderMsgs(snap.docs.slice().reverse()), () => {});
+  $("text").focus();
+}
+$("btnBack").onclick = () => { unsubMsgs?.(); currentChat = null; show("home"); };
+
+function openLightbox(src){ $("lbImg").src = src; $("lightbox").classList.remove("hidden"); }
+$("lightbox").onclick = () => { $("lightbox").classList.add("hidden"); $("lbImg").removeAttribute("src"); };
+
+function renderMsgs(docs){
+  const box = $("msgs");
+  box.textContent = "";
+  for (const d of docs){
+    const m = d.data(), mine = m.from === me;
+    const el = document.createElement("div");
+    // só mostra imagens no formato esperado (evita links externos de rastreamento)
+    const okImg = typeof m.img === "string" && m.img.startsWith(IMG_PREFIX);
+    el.className = "msg" + (mine ? " mine" : "") + (okImg ? " has-img" : "");
+    if (okImg){
+      const im = document.createElement("img");
+      im.src = m.img; im.alt = "Foto enviada"; im.loading = "lazy";
+      im.onclick = () => openLightbox(m.img);
+      el.append(im);
+    }
+    if (m.text) el.append(document.createTextNode(m.text));
+    const meta = document.createElement("small");
+    const t = m.createdAt?.toDate?.() ?? new Date();
+    meta.textContent = t.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+    if (mine){
+      const del = document.createElement("button");
+      del.className = "del"; del.textContent = "Apagar";
+      del.onclick = () => { if (confirm("Apagar esta mensagem?")) deleteDoc(d.ref); };
+      meta.append(del);
+    }
+    el.append(meta);
+    box.append(el);
+  }
+  box.scrollTop = box.scrollHeight;
+}
+
+async function postMessage(chat, fields, preview){
+  const members = [me, chat.other].sort();
+  await addDoc(collection(db, "chats", chat.id, "messages"),
+    { from: me, ...fields, createdAt: serverTimestamp() });
+  await setDoc(doc(db, "chats", chat.id),
+    { members, updatedAt: serverTimestamp(), lastText: preview }, { merge: true });
+}
+
+async function send(){
+  const text = $("text").value.trim();
+  if (!text || !currentChat) return;
+  $("text").value = "";
+  try { await postMessage(currentChat, { text }, text.slice(0, 80)); }
+  catch { $("text").value = text; alert("Não foi possível enviar. Tente novamente."); }
+}
+$("btnSend").onclick = send;
+$("text").addEventListener("keydown", e => { if (e.key === "Enter") send(); });
+
+/* ====== FOTOS: reduz e comprime no aparelho antes de enviar ====== */
+async function compressImage(file){
+  const bmp = await createImageBitmap(file);
+  const scale = Math.min(1, 1280 / Math.max(bmp.width, bmp.height));
+  const w = Math.round(bmp.width * scale), h = Math.round(bmp.height * scale);
+  const c = document.createElement("canvas"); c.width = w; c.height = h;
+  c.getContext("2d").drawImage(bmp, 0, 0, w, h);
+  let q = 0.75, data = c.toDataURL("image/jpeg", q);
+  while (data.length > IMG_MAX_CHARS && q > 0.3){ q -= 0.1; data = c.toDataURL("image/jpeg", q); }
+  if (data.length > IMG_MAX_CHARS) throw new Error("grande");
+  return data;
+}
+
+$("btnPhoto").onclick = () => $("file").click();
+$("file").onchange = async e => {
+  const f = e.target.files[0]; e.target.value = "";
+  if (!f || !currentChat) return;
+  if (!f.type.startsWith("image/")) { alert("Só é possível enviar imagens."); return; }
+  const chat = currentChat, btn = $("btnPhoto");
+  btn.disabled = true; btn.textContent = "Enviando...";
+  try { await postMessage(chat, { text: "", img: await compressImage(f) }, "Foto"); }
+  catch { alert("Não foi possível enviar a foto."); }
+  finally { btn.disabled = false; btn.textContent = "Foto"; }
+};
+</script>
+</body>
+</html>
