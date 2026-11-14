@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Papo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#E8EDF1; --panel:#F8FAFB; --ink:#17212B; --muted:#5E6B78;
+  --line:#CFD7DE; --mine:#2F5D62; --mine-ink:#F2FAF9; --theirs:#FFFFFF; --danger:#B3423A;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#10161C; --panel:#18212A; --ink:#E6ECF1; --muted:#8C9AA7;
+    --line:#2A3641; --mine:#3E7C82; --mine-ink:#F2FAF9; --theirs:#223039; --danger:#E27A70; }
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{font-family:"Instrument Sans",system-ui,sans-serif;background:var(--bg);color:var(--ink);font-size:16px}
+.app{max-width:640px;height:100dvh;margin:0 auto;background:var(--panel);display:flex;flex-direction:column;
+  border-inline:1px solid var(--line)}
+.hidden{display:none!important}
+header{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line)}
+header h1{font-size:18px;font-weight:600;margin:0;flex:1}
+button{font:inherit;cursor:pointer;border:1px solid var(--line);background:transparent;color:var(--ink);
+  padding:9px 14px;border-radius:10px}
+button.primary{background:var(--mine);border-color:var(--mine);color:var(--mine-ink);font-weight:600}
+button:focus-visible,input:focus-visible{outline:2px solid var(--mine);outline-offset:2px}
+input{font:inherit;width:100%;padding:12px;border-radius:10px;border:1px solid var(--line);
+  background:var(--bg);color:var(--ink)}
+.err{color:var(--danger);min-height:1.3em;font-size:14px;margin:6px 0 0}
+.note{color:var(--muted);font-size:14px;line-height:1.45}
+
+/* login */
+#login{margin:auto;width:100%;padding:28px 22px}
+#login h1{font-size:34px;margin:0 0 6px;letter-spacing:-.02em}
+#login .stack{display:grid;gap:10px;margin-top:22px}
+#login .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+
+/* lista */
+#list{flex:1;overflow:auto}
+.chat-item{display:block;width:100%;text-align:left;border:0;border-bottom:1px solid var(--line);
+  border-radius:0;padding:14px 16px}
+.chat-item b{display:block}
+.chat-item span{color:var(--muted);font-size:14px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.empty{padding:28px 20px}
+
+/* conversa */
+#msgs{flex:1;overflow:auto;padding:14px;display:flex;flex-direction:column;gap:6px}
+.msg{max-width:80%;padding:9px 12px;border-radius:14px;background:var(--theirs);border:1px solid var(--line);
+  align-self:flex-start;overflow-wrap:anywhere;white-space:pre-wrap}
+.msg.mine{align-self:flex-end;background:var(--mine);color:var(--mine-ink);border-color:var(--mine)}
+.msg small{display:block;opacity:.7;font-size:12px;margin-top:3px}
+.msg .del{all:unset;cursor:pointer;text-decoration:underline;margin-left:8px;font-size:12px}
+.msg .del:focus-visible{outline:2px solid currentColor}
+.composer{display:flex;gap:8px;padding:10px 12px calc(10px + env(safe-area-inset-bottom));border-top:1px solid var(--line)}
+.composer input{flex:1}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ENTRAR -->
+  <section id="login" class="hidden">
+    <h1>Papo</h1>
+    <p class="note">Converse só com nick e senha. Sem e-mail, sem telefone.</p>
+    <div class="stack">
+      <input id="nick" placeholder="Nick (letras, números e _)" autocomplete="username" autocapitalize="none" maxlength="20">
+      <input id="pass" type="password" placeholder="Senha (mínimo 6 caracteres)" autocomplete="current-password">
+      <div class="row">
+        <button class="primary" id="btnLogin">Entrar</button>
+        <button id="btnRegister">Criar conta</button>
+      </div>
+      <p class="err" id="loginErr" role="alert"></p>
+      <p class="note">Sem e-mail, não há recuperação de senha. Se esquecer, a conta se perde.</p>
+    </div>
+  </section>
+
+  <!-- CONVERSAS -->
+  <section id="home" class="hidden" style="display:flex;flex-direction:column;flex:1;min-height:0">
+    <header>
+      <h1 id="whoami"></h1>
+      <button id="btnNew" class="primary">Nova conversa</button>
+      <button id="btnOut">Sair</button>
+    </header>
+    <div id="newBox" class="hidden" style="padding:12px 14px;border-bottom:1px solid var(--line)">
+      <div style="display:flex;gap:8px">
+        <input id="otherNick" placeholder="Nick da pessoa" autocapitalize="none" maxlength="20">
+        <button id="btnGo" class="primary">Abrir</button>
+      </div>
+      <p class="err" id="newErr" role="alert"></p>
+    </div>
+    <div id="list"></div>
+  </section>
+
+  <!-- CONVERSA ABERTA -->
+  <section id="room" class="hidden" style="display:flex;flex-direction:column;flex:1;min-height:0">
+    <header>
+      <button id="btnBack" aria-label="Voltar">Voltar</button>
+      <h1 id="roomTitle"></h1>
+    </header>
+    <div id="msgs" aria-live="polite"></div>
+    <div class="composer">
+      <input id="text" placeholder="Escreva uma mensagem" maxlength="1000" autocomplete="off">
+      <button id="btnSend" class="primary">Enviar</button>
+    </div>
+  </section>
+
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword,
+         onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+import { getFirestore, doc, getDoc, setDoc, addDoc, deleteDoc, collection, query, where,
+         orderBy, limit, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+
+/* ====== COLE AQUI A CONFIG DO SEU PROJETO FIREBASE ====== */
+const firebaseConfig = {
+  apiKey: "COLE_AQUI",
+  authDomain: "COLE_AQUI",
+  projectId: "COLE_AQUI",
+  appId: "COLE_AQUI"
+};
+/* ======================================================== */
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const $ = id => document.getElementById(id);
+const EMAIL_DOMAIN = "@nick.app";   // o nick vira um e-mail interno; o usuário nunca vê isso
+const NICK_RE = /^[a-z0-9_]{3,20}$/;
+
+let me = null, unsubList = null, unsubMsgs = null, currentChat = null;
+
+function show(view){
+  for (const id of ["login","home","room"]) $(id).classList.toggle("hidden", id !== view);
+}
+const cleanNick = v => v.trim().toLowerCase();
+const chatIdFor = (a,b) => [a,b].sort().join("__");
+
+function authError(e){
+  const c = e.code || "";
+  if (c.includes("email-already-in-use")) return "Esse nick já existe. Escolha outro.";
+  if (c.includes("weak-password")) return "Senha curta demais. Use pelo menos 6 caracteres.";
+  if (c.includes("invalid-credential") || c.includes("wrong-password") || c.includes("user-not-found"))
+    return "Nick ou senha incorretos.";
+  if (c.includes("too-many-requests")) return "Muitas tentativas. Aguarde um pouco e tente de novo.";
+  return "Algo deu errado. Tente novamente.";
+}
+
+function readLogin(){
+  const nick = cleanNick($("nick").value), pass = $("pass").value;
+  if (!NICK_RE.test(nick)) { $("loginErr").textContent = "Nick: 3 a 20 letras minúsculas, números ou _."; return null; }
+  if (pass.length < 6) { $("loginErr").textContent = "A senha precisa de pelo menos 6 caracteres."; return null; }
+  $("loginErr").textContent = "";
+  return { nick, pass };
+}
+
+$("btnRegister").onclick = async () => {
+  const d = readLogin(); if (!d) return;
+  try {
+    const cred = await createUserWithEmailAndPassword(auth, d.nick + EMAIL_DOMAIN, d.pass);
+    await setDoc(doc(db, "users", d.nick), { uid: cred.user.uid, createdAt: serverTimestamp() });
+  } catch (e) { $("loginErr").textContent = authError(e); }
+};
+$("btnLogin").onclick = async () => {
+  const d = readLogin(); if (!d) return;
+  try { await signInWithEmailAndPassword(auth, d.nick + EMAIL_DOMAIN, d.pass); }
+  catch (e) { $("loginErr").textContent = authError(e); }
+};
+$("pass").addEventListener("keydown", e => { if (e.key === "Enter") $("btnLogin").click(); });
+$("btnOut").onclick = () => signOut(auth);
+
+onAuthStateChanged(auth, user => {
+  unsubList?.(); unsubMsgs?.(); currentChat = null;
+  if (!user) { me = null; show("login"); return; }
+  me = user.email.split("@")[0];
+  $("whoami").textContent = me;
+  show("home");
+  const q = query(collection(db, "chats"), where("members", "array-contains", me));
+  unsubList = onSnapshot(q, snap => {
+    const items = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      .sort((a,b) => (b.updatedAt?.seconds ?? 9e12) - (a.updatedAt?.seconds ?? 9e12));
+    renderList(items);
+  });
+});
+
+function renderList(items){
+  const box = $("list"); box.textContent = "";
+  if (!items.length){
+    const p = document.createElement("p");
+    p.className = "note empty";
+    p.textContent = "Nenhuma conversa ainda. Toque em Nova conversa e digite o nick de alguém.";
+    box.append(p); return;
+  }
+  for (const c of items){
+    const other = c.members.find(m => m !== me) || me;
+    const b = document.createElement("button");
+    b.className = "chat-item";
+    const n = document.createElement("b"); n.textContent = other;
+    const s = document.createElement("span"); s.textContent = c.lastText || "";
+    b.append(n, s);
+    b.onclick = () => openChat(other);
+    box.append(b);
+  }
+}
+
+$("btnNew").onclick = () => { $("newBox").classList.toggle("hidden"); $("newErr").textContent = ""; $("otherNick").focus(); };
+$("btnGo").onclick = async () => {
+  const other = cleanNick($("otherNick").value);
+  if (!NICK_RE.test(other)) { $("newErr").textContent = "Nick inválido."; return; }
+  if (other === me) { $("newErr").textContent = "Você não pode conversar consigo mesmo."; return; }
+  try {
+    const u = await getDoc(doc(db, "users", other));
+    if (!u.exists()) { $("newErr").textContent = "Esse nick não existe."; return; }
+    $("otherNick").value = ""; $("newBox").classList.add("hidden");
+    openChat(other);
+  } catch { $("newErr").textContent = "Não foi possível verificar o nick."; }
+};
+
+function openChat(other){
+  currentChat = { id: chatIdFor(me, other), other };
+  $("roomTitle").textContent = other;
+  $("msgs").textContent = "";
+  show("room");
+  unsubMsgs?.();
+  const q = query(collection(db, "chats", currentChat.id, "messages"), orderBy("createdAt"), limit(300));
+  unsubMsgs = onSnapshot(q, snap => renderMsgs(snap.docs), () => {});
+  $("text").focus();
+}
+$("btnBack").onclick = () => { unsubMsgs?.(); currentChat = null; show("home"); };
+
+function renderMsgs(docs){
+  const box = $("msgs");
+  const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 120;
+  box.textContent = "";
+  for (const d of docs){
+    const m = d.data(), mine = m.from === me;
+    const el = document.createElement("div");
+    el.className = "msg" + (mine ? " mine" : "");
+    el.append(document.createTextNode(m.text));
+    const meta = document.createElement("small");
+    const t = m.createdAt?.toDate?.() ?? new Date();
+    meta.textContent = t.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+    if (mine){
+      const del = document.createElement("button");
+      del.className = "del"; del.textContent = "Apagar";
+      del.onclick = () => { if (confirm("Apagar esta mensagem?")) deleteDoc(d.ref); };
+      meta.append(del);
+    }
+    el.append(meta);
+    box.append(el);
+  }
+  if (nearBottom || docs.length) box.scrollTop = box.scrollHeight;
+}
+
+async function send(){
+  const text = $("text").value.trim();
+  if (!text || !currentChat) return;
+  $("text").value = "";
+  const members = [me, currentChat.other].sort();
+  try {
+    await addDoc(collection(db, "chats", currentChat.id, "messages"),
+      { from: me, text, createdAt: serverTimestamp() });
+    await setDoc(doc(db, "chats", currentChat.id),
+      { members, updatedAt: serverTimestamp(), lastText: text.slice(0, 80) }, { merge: true });
+  } catch { $("text").value = text; alert("Não foi possível enviar. Tente novamente."); }
+}
+$("btnSend").onclick = send;
+$("text").addEventListener("keydown", e => { if (e.key === "Enter") send(); });
+</script>
+</body>
+</html>
