@@ -185,6 +185,7 @@ button.av{cursor:pointer;padding:0}
       <button id="btnBack" class="icon-btn" aria-label="Voltar"><svg class="ic"><use href="#i-back"/></svg></button>
       <button id="roomAv" class="av sm" aria-label="Foto do contato"></button>
       <div class="grow"><h1 id="roomName"></h1></div>
+      <button id="btnRoomMenu" class="icon-btn" aria-label="Opções da conversa"><svg class="ic dots"><use href="#i-dots"/></svg></button>
     </header>
     <div id="msgs" aria-live="polite"></div>
     <p id="deadBanner" class="dead hidden">Esta conta foi excluída. Você só pode ler o histórico.</p>
@@ -214,6 +215,16 @@ button.av{cursor:pointer;padding:0}
       <button id="btnProfile" class="menu-item">Foto de perfil</button>
       <button id="btnOut" class="menu-item">Sair da conta</button>
       <button id="btnAskDel" class="menu-item danger">Excluir conta</button>
+    </div>
+  </div>
+
+  <!-- JANELA: opções da conversa -->
+  <div id="sheetChat" class="sheet-wrap hidden">
+    <div class="sheet" role="dialog" aria-label="Opções da conversa">
+      <h2 id="chatSheetTitle">Conversa</h2>
+      <p>"Para mim" esconde o histórico só para você, e a outra pessoa continua vendo tudo. "Para todos" apaga a conversa para os dois.</p>
+      <button id="btnClearMine" class="menu-item">Apagar conversa para mim</button>
+      <button id="btnClearBoth" class="menu-item danger">Apagar conversa para todos</button>
     </div>
   </div>
 
@@ -257,7 +268,7 @@ import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, on
          EmailAuthProvider, reauthenticateWithCredential, deleteUser }
   from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import { getFirestore, doc, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteField, deleteDoc, writeBatch, collection, query, where,
-         orderBy, limit, onSnapshot, serverTimestamp }
+         orderBy, limit, onSnapshot, serverTimestamp, Timestamp }
   from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
 /* ====== CONFIGURAÇÃO DO FIREBASE ====== */
@@ -277,6 +288,7 @@ const EMAIL_DOMAIN = "@nick.app";
 const NICK_RE = /^[a-z0-9_]{3,20}$/;
 const IMG_PREFIX = "data:image/jpeg;base64,";
 const IMG_MAX_CHARS = 850000;
+const RETENTION_DAYS = 14;   // dias que uma conversa apagada "para todos" fica guardada antes de sumir de vez
 
 let me = null, myUid = null, unsubList = null, unsubMsgs = null, currentChat = null, firstRender = true;
 let myPhoto = null, roomPhoto = null;
@@ -397,6 +409,7 @@ onAuthStateChanged(auth, user => {
 
 /* ---------- lista de conversas ---------- */
 function renderList(items){
+  items = items.filter(c => { const cl = c.clearedAt?.[myUid]; return !(cl && c.updatedAt && c.updatedAt.toMillis() <= cl.toMillis()); });
   const box = $("list"); box.textContent = "";
   if (!items.length){
     const e = document.createElement("div");
@@ -458,8 +471,14 @@ function openChat(otherNick, otherUid){
   $("composer").classList.remove("hidden");
   show("room");
   unsubMsgs?.();
-  const q = query(collection(db, "chats", chat.id, "messages"), orderBy("createdAt", "desc"), limit(100));
-  unsubMsgs = onSnapshot(q, snap => renderMsgs(snap.docs.slice().reverse()), () => {});
+  getDoc(doc(db, "chats", chat.id)).then(s => s.exists() ? (s.data().clearedAt?.[myUid] || null) : null).catch(() => null).then(cleared => {
+    if (currentChat !== chat) return;
+    const col = collection(db, "chats", chat.id, "messages");
+    const q = cleared
+      ? query(col, where("createdAt", ">", cleared), orderBy("createdAt", "desc"), limit(100))
+      : query(col, orderBy("createdAt", "desc"), limit(100));
+    unsubMsgs = onSnapshot(q, snap => renderMsgs(snap.docs.slice().reverse()), () => {});
+  });
   // se a conta da outra pessoa foi excluída (ou o nick foi reaproveitado), deixa só leitura
   getDoc(doc(db, "users", otherNick)).then(s => {
     if (currentChat !== chat) return;
@@ -559,6 +578,49 @@ $("file").onchange = async e => {
   catch { alert("Não foi possível enviar a foto."); }
   finally { btn.disabled = false; btn.classList.remove("busy"); }
 };
+
+/* ---------- apagar conversa ---------- */
+$("btnRoomMenu").onclick = () => { $("chatSheetTitle").textContent = currentChat ? currentChat.other : "Conversa"; openSheet("sheetChat"); };
+async function clearChat(all){
+  const chat = currentChat; if (!chat) return;
+  const msg = all
+    ? "Apagar a conversa para vocês dois? Não dá para desfazer."
+    : "Apagar a conversa para você? A outra pessoa continua vendo.";
+  if (!confirm(msg)) return;
+  closeSheets();
+  const chatRef = doc(db, "chats", chat.id);
+  try {
+    if (all){
+      // carimba as mensagens com uma data de validade; o Firestore as apaga sozinho depois dela
+      const exp = Timestamp.fromMillis(Date.now() + RETENTION_DAYS * 86400000);
+      const cl = (await getDoc(chatRef)).data()?.clearedAt || {};
+      const tA = cl[myUid], tB = cl[chat.otherUid];
+      const col = collection(db, "chats", chat.id, "messages");
+      const q = (tA && tB) ? query(col, where("createdAt", ">", tA.toMillis() < tB.toMillis() ? tA : tB)) : query(col);
+      const todo = (await getDocs(q)).docs.filter(d => !d.data().expireAt);
+      for (let i = 0; i < todo.length; i += 400){
+        const batch = writeBatch(db);
+        todo.slice(i, i + 400).forEach(d => batch.update(d.ref, { expireAt: exp }));
+        await batch.commit();
+      }
+      await setDoc(chatRef, {
+        members: [myUid, chat.otherUid].sort(),
+        names: { [myUid]: me, [chat.otherUid]: chat.other },
+        clearedAt: { [myUid]: serverTimestamp(), [chat.otherUid]: serverTimestamp() },
+        deletedAt: serverTimestamp(), lastText: ""
+      }, { merge: true });
+    } else {
+      await setDoc(chatRef, {
+        members: [myUid, chat.otherUid].sort(),
+        names: { [myUid]: me, [chat.otherUid]: chat.other },
+        clearedAt: { [myUid]: serverTimestamp() }
+      }, { merge: true });
+    }
+    unsubMsgs?.(); currentChat = null; $("msgs").textContent = ""; show("home");
+  } catch { alert("Não foi possível apagar a conversa. Tente novamente."); }
+}
+$("btnClearMine").onclick = () => clearChat(false);
+$("btnClearBoth").onclick = () => clearChat(true);
 
 /* ---------- foto de perfil ---------- */
 async function makeAvatar(file){
