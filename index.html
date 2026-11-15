@@ -1,0 +1,644 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#050506">
+<title>Chat anônimo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#050506; --s1:#0D0E10; --s2:#16181B; --s3:#202327; --line:#1F2226;
+  --ink:#F4F5F6; --muted:#868C95; --accent:#C8FF3D; --accent-ink:#0A0C00; --danger:#FF6B5E;
+  color-scheme: dark;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;margin:0}
+body{font-family:"Bricolage Grotesque",system-ui,sans-serif;background:var(--bg);color:var(--ink);font-size:16px;
+  -webkit-font-smoothing:antialiased}
+.hidden{display:none!important}
+.app{position:relative;max-width:640px;height:100dvh;margin:0 auto;display:flex;flex-direction:column;
+  background:var(--bg);border-inline:1px solid var(--line);overflow:hidden}
+.screen{display:flex;flex-direction:column;flex:1;min-height:0;position:relative}
+.grow{flex:1;min-width:0}
+.ic{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.ic.dots{stroke-width:3.6}
+
+/* botões e campos */
+button{font:inherit;color:inherit;cursor:pointer;border:0;background:none;padding:0}
+button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.btn{height:52px;padding:0 20px;border-radius:16px;background:var(--s2);font-weight:600;transition:transform .12s,background .15s}
+.btn:active{transform:scale(.98)}
+.btn.primary{background:var(--accent);color:var(--accent-ink)}
+.btn.danger{background:var(--danger);color:#1A0503}
+.btn:disabled{opacity:.55}
+.wide{width:100%}
+input{font:inherit;width:100%;height:52px;padding:0 16px;border-radius:16px;border:1px solid var(--line);
+  background:var(--s1);color:var(--ink);transition:border-color .15s,background .15s}
+input::placeholder{color:var(--muted)}
+input:focus{border-color:var(--accent);background:var(--s2);outline:none}
+.err{color:var(--danger);min-height:1.3em;font-size:14px;margin:0}
+.link{color:var(--muted);font-size:14px}
+.icon-btn{width:44px;height:44px;border-radius:14px;display:grid;place-items:center;color:var(--ink);transition:background .15s}
+.icon-btn:active,.icon-btn:hover{background:var(--s2)}
+.sub{margin:0;color:var(--muted);font-size:13px}
+
+/* entrar */
+#login{justify-content:center;padding:28px 22px}
+.login-card{display:grid;gap:12px;width:100%}
+.mark{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;margin-bottom:10px;
+  background:radial-gradient(circle,rgba(200,255,61,.25),transparent 70%)}
+.mark i{width:14px;height:14px;border-radius:50%;background:var(--accent);box-shadow:0 0 22px var(--accent)}
+.login-card h1{font-size:40px;line-height:1.05;margin:0 0 14px;letter-spacing:-.035em;font-weight:700}
+.seg{display:grid;grid-template-columns:1fr 1fr;background:var(--s1);border:1px solid var(--line);border-radius:16px;padding:4px;margin-bottom:4px}
+.seg button{height:42px;border-radius:12px;color:var(--muted);font-weight:600;transition:background .15s,color .15s}
+.seg button.on{background:var(--s3);color:var(--ink)}
+.field{position:relative}
+.field input{padding-right:84px}
+.field .link{position:absolute;right:6px;top:6px;height:40px;padding:0 12px;border-radius:12px}
+
+/* topo */
+.top{display:flex;align-items:center;gap:12px;padding:14px 14px 12px;border-bottom:1px solid var(--line)}
+.top h1{margin:0;font-size:20px;font-weight:700;letter-spacing:-.02em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.av{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;font-weight:700;flex:none;font-size:17px;overflow:hidden}
+.av img{width:100%;height:100%;object-fit:cover;display:block}
+.av.sm{width:38px;height:38px;font-size:15px}
+.av.xl{width:132px;height:132px;font-size:54px}
+button.av{cursor:pointer;padding:0}
+.avwrap{position:relative;width:132px;margin:6px auto 0}
+.badge{position:absolute;right:-2px;bottom:-2px;width:42px;height:42px;border-radius:50%;background:var(--accent);
+  color:var(--accent-ink);display:grid;place-items:center;border:3px solid var(--s1)}
+.center{text-align:center}
+
+/* lista */
+#list{flex:1;overflow:auto;padding:6px 0 96px}
+.chat-item{display:flex;align-items:center;gap:14px;width:100%;text-align:left;padding:12px 16px;transition:background .15s}
+.chat-item:active,.chat-item:hover{background:var(--s1)}
+.chat-item .meta{flex:1;min-width:0}
+.chat-item b{display:block;font-weight:600;font-size:17px}
+.chat-item span.prev{display:block;color:var(--muted);font-size:14px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chat-item time{color:var(--muted);font-size:12px;align-self:flex-start;margin-top:4px}
+.empty{text-align:center;padding:90px 30px;color:var(--muted)}
+.empty .ring{width:72px;height:72px;margin:0 auto 18px;border-radius:50%;border:1px dashed var(--s3);display:grid;place-items:center;color:var(--s3)}
+.empty .ring .ic{width:30px;height:30px}
+.empty b{display:block;color:var(--ink);font-size:18px;margin-bottom:6px}
+.fab{position:absolute;right:20px;bottom:calc(22px + env(safe-area-inset-bottom));width:60px;height:60px;border-radius:20px;
+  background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;
+  box-shadow:0 10px 30px rgba(200,255,61,.22);transition:transform .12s}
+.fab:active{transform:scale(.94)}
+.fab .ic{width:26px;height:26px;stroke-width:2.4}
+
+/* conversa */
+#msgs{flex:1;overflow:auto;padding:14px 14px 8px;display:flex;flex-direction:column;gap:3px}
+.day{align-self:center;margin:14px 0 8px;font-size:12px;color:var(--muted);background:var(--s1);border:1px solid var(--line);
+  padding:4px 12px;border-radius:99px}
+.msg{max-width:78%;padding:9px 13px;border-radius:20px;background:var(--s2);align-self:flex-start;
+  border-bottom-left-radius:6px;overflow-wrap:anywhere;white-space:pre-wrap;line-height:1.38;animation:pop .18s ease-out}
+.msg.mine{align-self:flex-end;background:var(--accent);color:var(--accent-ink);border-bottom-left-radius:20px;border-bottom-right-radius:6px}
+.msg.has-img{width:min(78%,300px);padding:5px}
+.msg.has-img .txt{padding:4px 8px 0}
+.msg img{display:block;width:100%;height:auto;border-radius:16px;cursor:zoom-in}
+.msg small{display:block;font-size:11px;opacity:.6;margin-top:3px;text-align:right}
+.msg.has-img small{padding:0 8px 3px}
+.msg .actions{display:none;margin-top:6px}
+.msg.open .actions{display:flex}
+.msg .del{font-size:13px;font-weight:600;padding:4px 0;text-decoration:underline}
+@keyframes pop{from{opacity:0;transform:translateY(6px) scale(.98)}to{opacity:1;transform:none}}
+
+.composer{display:flex;align-items:center;gap:8px;padding:10px 12px calc(10px + env(safe-area-inset-bottom));border-top:1px solid var(--line);background:var(--bg)}
+.composer input{flex:1;min-width:0;height:48px;border-radius:99px;padding:0 18px}
+.composer .icon-btn{color:var(--muted)}
+.composer .icon-btn.busy{color:var(--accent);animation:pulse 1s infinite}
+.send{width:48px;height:48px;border-radius:50%;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;flex:none;transition:transform .12s}
+.send:active{transform:scale(.92)}
+.dead{margin:0;padding:16px;text-align:center;color:var(--muted);font-size:14px;border-top:1px solid var(--line)}
+@keyframes pulse{50%{opacity:.35}}
+
+/* janelas inferiores */
+.sheet-wrap{position:absolute;inset:0;z-index:20;display:flex;align-items:flex-end;background:rgba(0,0,0,.62);animation:fade .15s}
+.sheet{width:100%;background:var(--s1);border:1px solid var(--line);border-bottom:0;border-radius:26px 26px 0 0;
+  padding:12px 20px calc(22px + env(safe-area-inset-bottom));display:grid;gap:12px;animation:up .22s cubic-bezier(.2,.8,.2,1)}
+.sheet::before{content:"";width:40px;height:4px;border-radius:9px;background:var(--s3);margin:0 auto 6px}
+.sheet h2{margin:0;font-size:22px;letter-spacing:-.02em}
+.sheet p{margin:0;color:var(--muted);line-height:1.45}
+.sheet .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.menu-item{display:flex;align-items:center;height:54px;padding:0 16px;border-radius:16px;background:var(--s2);font-weight:600;text-align:left;width:100%}
+.menu-item.danger{color:var(--danger)}
+@keyframes up{from{transform:translateY(40px);opacity:0}to{transform:none;opacity:1}}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+
+#lightbox{position:fixed;inset:0;background:rgba(0,0,0,.95);display:flex;align-items:center;justify-content:center;z-index:30;cursor:zoom-out}
+#lightbox img{max-width:100%;max-height:100%}
+
+@media (prefers-reduced-motion: reduce){ *{animation:none!important;transition:none!important} }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-dots" viewBox="0 0 24 24"><path d="M5 12h.01M12 12h.01M19 12h.01"/></symbol>
+  <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="4"/><circle cx="9" cy="10" r="1.6"/><path d="M21 16l-5-5-9 9"/></symbol>
+  <symbol id="i-up" viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></symbol>
+  <symbol id="i-chat" viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></symbol>
+  <symbol id="i-camera" viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.6"/></symbol>
+</svg>
+
+<div class="app">
+
+  <!-- ENTRAR -->
+  <section id="login" class="screen hidden">
+    <div class="login-card">
+      <div class="mark"><i></i></div>
+      <h1>Chat anônimo</h1>
+      <div class="seg" role="group" aria-label="Modo">
+        <button id="tabIn" class="on" type="button">Entrar</button>
+        <button id="tabUp" type="button">Criar conta</button>
+      </div>
+      <input id="nick" placeholder="Nick" autocomplete="username" autocapitalize="none" maxlength="20">
+      <div class="field">
+        <input id="pass" type="password" placeholder="Senha" autocomplete="current-password">
+        <button id="btnEye" type="button" class="link">Mostrar</button>
+      </div>
+      <button id="btnAuth" class="btn primary wide" type="button">Entrar</button>
+      <p class="err" id="loginErr" role="alert"></p>
+    </div>
+  </section>
+
+  <!-- CONVERSAS -->
+  <section id="home" class="screen hidden">
+    <header class="top">
+      <button id="meAv" class="av sm" aria-label="Meu perfil"></button>
+      <div class="grow"><h1>Conversas</h1><p id="whoami" class="sub"></p></div>
+      <button id="btnMenu" class="icon-btn" aria-label="Menu"><svg class="ic dots"><use href="#i-dots"/></svg></button>
+    </header>
+    <div id="list"></div>
+    <button id="btnNew" class="fab" aria-label="Nova conversa"><svg class="ic"><use href="#i-plus"/></svg></button>
+  </section>
+
+  <!-- CONVERSA ABERTA -->
+  <section id="room" class="screen hidden">
+    <header class="top">
+      <button id="btnBack" class="icon-btn" aria-label="Voltar"><svg class="ic"><use href="#i-back"/></svg></button>
+      <button id="roomAv" class="av sm" aria-label="Foto do contato"></button>
+      <div class="grow"><h1 id="roomName"></h1></div>
+    </header>
+    <div id="msgs" aria-live="polite"></div>
+    <p id="deadBanner" class="dead hidden">Esta conta foi excluída. Você só pode ler o histórico.</p>
+    <div id="composer" class="composer">
+      <input id="file" type="file" accept="image/*" class="hidden">
+      <button id="btnPhoto" class="icon-btn" aria-label="Enviar foto"><svg class="ic"><use href="#i-image"/></svg></button>
+      <input id="text" placeholder="Mensagem" maxlength="1000" autocomplete="off">
+      <button id="btnSend" class="send" aria-label="Enviar"><svg class="ic"><use href="#i-up"/></svg></button>
+    </div>
+  </section>
+
+  <!-- JANELA: nova conversa -->
+  <div id="sheetNew" class="sheet-wrap hidden">
+    <div class="sheet" role="dialog" aria-label="Nova conversa">
+      <h2>Nova conversa</h2>
+      <p>Digite o nick de quem você quer chamar.</p>
+      <input id="otherNick" placeholder="Nick da pessoa" autocapitalize="none" maxlength="20">
+      <p class="err" id="newErr" role="alert"></p>
+      <button id="btnGo" class="btn primary wide">Abrir conversa</button>
+    </div>
+  </div>
+
+  <!-- JANELA: menu -->
+  <div id="sheetMenu" class="sheet-wrap hidden">
+    <div class="sheet" role="dialog" aria-label="Menu">
+      <h2 id="menuTitle"></h2>
+      <button id="btnProfile" class="menu-item">Foto de perfil</button>
+      <button id="btnOut" class="menu-item">Sair da conta</button>
+      <button id="btnAskDel" class="menu-item danger">Excluir conta</button>
+    </div>
+  </div>
+
+  <!-- JANELA: perfil -->
+  <div id="sheetProfile" class="sheet-wrap hidden">
+    <div class="sheet center" role="dialog" aria-label="Foto de perfil">
+      <h2>Foto de perfil</h2>
+      <div class="avwrap">
+        <button id="profAv" class="av xl" aria-label="Ver foto"></button>
+        <button id="profBadge" class="badge" aria-label="Escolher foto"><svg class="ic"><use href="#i-camera"/></svg></button>
+      </div>
+      <p id="profName"></p>
+      <input id="avatarFile" type="file" accept="image/*" class="hidden">
+      <p class="err" id="profErr" role="alert"></p>
+      <button id="btnChangePhoto" class="btn primary wide">Alterar foto</button>
+      <button id="btnRemovePhoto" class="btn wide hidden">Remover foto</button>
+    </div>
+  </div>
+
+  <!-- JANELA: excluir conta -->
+  <div id="sheetDel" class="sheet-wrap hidden">
+    <div class="sheet" role="dialog" aria-label="Excluir conta">
+      <h2>Excluir conta</h2>
+      <p>Isso apaga sua conta e as mensagens que você enviou. Não dá para desfazer, e não há como recuperar depois.</p>
+      <input id="delPass" type="password" placeholder="Digite sua senha para confirmar" autocomplete="current-password">
+      <p class="err" id="delErr" role="alert"></p>
+      <div class="row">
+        <button id="btnDelCancel" class="btn">Cancelar</button>
+        <button id="btnDelConfirm" class="btn danger">Excluir</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div id="lightbox" class="hidden" role="dialog" aria-label="Foto ampliada"><img id="lbImg" alt=""></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut,
+         EmailAuthProvider, reauthenticateWithCredential, deleteUser }
+  from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+import { getFirestore, doc, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteField, deleteDoc, writeBatch, collection, query, where,
+         orderBy, limit, onSnapshot, serverTimestamp }
+  from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+
+/* ====== CONFIGURAÇÃO DO FIREBASE ====== */
+const firebaseConfig = {
+  apiKey: "AIzaSyB7aWtqSjSa1XdJ7RMnVfqJKWg4dp9kbZU",
+  authDomain: "mystic-4f213.firebaseapp.com",
+  projectId: "mystic-4f213",
+  appId: "1:720635035480:web:3d52aade95328d221baf2d"
+};
+/* ====================================== */
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const $ = id => document.getElementById(id);
+const EMAIL_DOMAIN = "@nick.app";
+const NICK_RE = /^[a-z0-9_]{3,20}$/;
+const IMG_PREFIX = "data:image/jpeg;base64,";
+const IMG_MAX_CHARS = 850000;
+
+let me = null, myUid = null, unsubList = null, unsubMsgs = null, currentChat = null, firstRender = true;
+let myPhoto = null, roomPhoto = null;
+const photoCache = new Map();   // nick -> { uid, photo }
+
+/* ---------- utilidades de interface ---------- */
+function show(view){ for (const id of ["login","home","room"]) $(id).classList.toggle("hidden", id !== view); }
+function openSheet(id, focusId){ $(id).classList.remove("hidden"); if (focusId) setTimeout(() => $(focusId).focus(), 60); }
+function closeSheets(){ document.querySelectorAll(".sheet-wrap").forEach(s => s.classList.add("hidden")); }
+document.querySelectorAll(".sheet-wrap").forEach(w => w.addEventListener("click", e => { if (e.target === w) closeSheets(); }));
+document.addEventListener("keydown", e => { if (e.key === "Escape"){ closeSheets(); $("lightbox").click(); } });
+
+const cleanNick = v => v.trim().toLowerCase();
+const validPhoto = p => typeof p === "string" && /^data:image\/jpeg;base64,[A-Za-z0-9+\/=]+$/.test(p);
+function setAvatar(el, name, photo){
+  el.textContent = ""; el.style.background = ""; el.style.color = "";
+  if (validPhoto(photo)){
+    const im = document.createElement("img"); im.src = photo; im.alt = ""; el.append(im); return;
+  }
+  let h = 0; for (const c of name) h = (h * 31 + c.charCodeAt(0)) % 360;
+  el.textContent = name.charAt(0).toUpperCase();
+  el.style.background = `hsl(${h} 38% 20%)`;
+  el.style.color = `hsl(${h} 85% 78%)`;
+}
+async function getPhoto(nick, uid){
+  let e = photoCache.get(nick);
+  if (!e){
+    try {
+      const s = await getDoc(doc(db, "users", nick));
+      e = s.exists() ? { uid: s.data().uid, photo: s.data().photo || null } : { uid: null, photo: null };
+    } catch { e = { uid: null, photo: null }; }
+    photoCache.set(nick, e);
+  }
+  return e.uid === uid ? e.photo : null;
+}
+const fmtTime = d => d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+const same = (a, b) => a.toDateString() === b.toDateString();
+function dayLabel(d){
+  const t = new Date(), y = new Date(); y.setDate(t.getDate() - 1);
+  if (same(d, t)) return "Hoje";
+  if (same(d, y)) return "Ontem";
+  return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
+}
+
+/* ---------- entrar / criar conta ---------- */
+let mode = "in";
+function setMode(m){
+  mode = m;
+  $("tabIn").classList.toggle("on", m === "in");
+  $("tabUp").classList.toggle("on", m === "up");
+  $("btnAuth").textContent = m === "in" ? "Entrar" : "Criar conta";
+  $("pass").autocomplete = m === "in" ? "current-password" : "new-password";
+  $("loginErr").textContent = "";
+}
+$("tabIn").onclick = () => setMode("in");
+$("tabUp").onclick = () => setMode("up");
+$("btnEye").onclick = () => {
+  const p = $("pass"), showing = p.type === "text";
+  p.type = showing ? "password" : "text";
+  $("btnEye").textContent = showing ? "Mostrar" : "Ocultar";
+};
+
+function authError(e){
+  const c = e.code || "";
+  if (c.includes("email-already-in-use")) return "Esse nick já existe. Escolha outro.";
+  if (c.includes("weak-password")) return "Senha curta demais. Use pelo menos 6 caracteres.";
+  if (c.includes("invalid-credential") || c.includes("wrong-password") || c.includes("user-not-found"))
+    return "Nick ou senha incorretos.";
+  if (c.includes("too-many-requests")) return "Muitas tentativas. Aguarde um pouco e tente de novo.";
+  return "Algo deu errado. Tente novamente.";
+}
+function readLogin(){
+  const nick = cleanNick($("nick").value), pass = $("pass").value;
+  if (!NICK_RE.test(nick)) { $("loginErr").textContent = "Nick: 3 a 20 letras minúsculas, números ou _."; return null; }
+  if (pass.length < 6) { $("loginErr").textContent = "A senha precisa de pelo menos 6 caracteres."; return null; }
+  $("loginErr").textContent = "";
+  return { nick, pass };
+}
+async function doAuth(){
+  const d = readLogin(); if (!d) return;
+  const btn = $("btnAuth"); btn.disabled = true;
+  try {
+    if (mode === "in") {
+      await signInWithEmailAndPassword(auth, d.nick + EMAIL_DOMAIN, d.pass);
+    } else {
+      const cred = await createUserWithEmailAndPassword(auth, d.nick + EMAIL_DOMAIN, d.pass);
+      await setDoc(doc(db, "users", d.nick), { uid: cred.user.uid, createdAt: serverTimestamp() });
+    }
+  } catch (e) { $("loginErr").textContent = authError(e); }
+  finally { btn.disabled = false; }
+}
+$("btnAuth").onclick = doAuth;
+$("pass").addEventListener("keydown", e => { if (e.key === "Enter") doAuth(); });
+
+onAuthStateChanged(auth, user => {
+  unsubList?.(); unsubMsgs?.(); currentChat = null; closeSheets();
+  $("pass").value = "";
+  photoCache.clear(); myPhoto = null;
+  if (!user) { me = null; myUid = null; show("login"); return; }
+  me = user.email.split("@")[0]; myUid = user.uid;
+  $("whoami").textContent = "@" + me;
+  $("menuTitle").textContent = "@" + me;
+  setAvatar($("meAv"), me);
+  getDoc(doc(db, "users", me)).then(s => {
+    if (!s.exists() || myUid !== user.uid) return;
+    myPhoto = s.data().photo || null;
+    photoCache.set(me, { uid: myUid, photo: myPhoto });
+    setAvatar($("meAv"), me, myPhoto);
+  }).catch(() => {});
+  show("home");
+  const q = query(collection(db, "chats"), where("members", "array-contains", myUid));
+  unsubList = onSnapshot(q, snap => {
+    const items = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => (b.updatedAt?.seconds ?? 9e12) - (a.updatedAt?.seconds ?? 9e12));
+    renderList(items);
+  }, () => {});
+});
+
+/* ---------- lista de conversas ---------- */
+function renderList(items){
+  const box = $("list"); box.textContent = "";
+  if (!items.length){
+    const e = document.createElement("div");
+    e.className = "empty";
+    e.innerHTML = '<div class="ring"><svg class="ic"><use href="#i-chat"/></svg></div><b>Nenhuma conversa ainda</b>Toque no + para chamar alguém pelo nick.';
+    box.append(e); return;
+  }
+  for (const c of items){
+    const otherUid = c.members.find(m => m !== myUid);
+    const other = c.names?.[otherUid] || "conta excluída";
+    const b = document.createElement("button");
+    b.className = "chat-item";
+    const av = document.createElement("div"); av.className = "av"; setAvatar(av, other);
+    getPhoto(other, otherUid).then(p => { if (p) setAvatar(av, other, p); });
+    const meta = document.createElement("div"); meta.className = "meta";
+    const n = document.createElement("b"); n.textContent = other;
+    const s = document.createElement("span"); s.className = "prev"; s.textContent = c.lastText || "";
+    meta.append(n, s);
+    b.append(av, meta);
+    const ts = c.updatedAt?.toDate?.();
+    if (ts){
+      const t = document.createElement("time");
+      t.textContent = same(ts, new Date()) ? fmtTime(ts) : dayLabel(ts);
+      b.append(t);
+    }
+    b.onclick = () => openChat(other, otherUid);
+    box.append(b);
+  }
+}
+
+/* ---------- nova conversa ---------- */
+$("btnNew").onclick = () => { $("newErr").textContent = ""; $("otherNick").value = ""; openSheet("sheetNew", "otherNick"); };
+async function startChat(){
+  const other = cleanNick($("otherNick").value);
+  if (!NICK_RE.test(other)) { $("newErr").textContent = "Nick inválido."; return; }
+  if (other === me) { $("newErr").textContent = "Você não pode conversar consigo mesmo."; return; }
+  try {
+    const u = await getDoc(doc(db, "users", other));
+    if (!u.exists()) { $("newErr").textContent = "Esse nick não existe."; return; }
+    closeSheets();
+    openChat(other, u.data().uid);
+  } catch { $("newErr").textContent = "Não foi possível verificar o nick."; }
+}
+$("btnGo").onclick = startChat;
+$("otherNick").addEventListener("keydown", e => { if (e.key === "Enter") startChat(); });
+
+/* ---------- conversa aberta ---------- */
+function openChat(otherNick, otherUid){
+  const chat = { id: [myUid, otherUid].sort().join("__"), other: otherNick, otherUid };
+  currentChat = chat; firstRender = true;
+  $("roomName").textContent = otherNick;
+  setAvatar($("roomAv"), otherNick); roomPhoto = null;
+  getPhoto(otherNick, otherUid).then(p => {
+    if (currentChat !== chat) return;
+    roomPhoto = p; setAvatar($("roomAv"), otherNick, p);
+  });
+  $("msgs").textContent = "";
+  $("deadBanner").classList.add("hidden");
+  $("composer").classList.remove("hidden");
+  show("room");
+  unsubMsgs?.();
+  const q = query(collection(db, "chats", chat.id, "messages"), orderBy("createdAt", "desc"), limit(100));
+  unsubMsgs = onSnapshot(q, snap => renderMsgs(snap.docs.slice().reverse()), () => {});
+  // se a conta da outra pessoa foi excluída (ou o nick foi reaproveitado), deixa só leitura
+  getDoc(doc(db, "users", otherNick)).then(s => {
+    if (currentChat !== chat) return;
+    if (!s.exists() || s.data().uid !== otherUid){
+      chat.dead = true;
+      $("deadBanner").classList.remove("hidden");
+      $("composer").classList.add("hidden");
+    } else $("text").focus();
+  }).catch(() => {});
+}
+$("btnBack").onclick = () => { unsubMsgs?.(); currentChat = null; show("home"); };
+
+function openLightbox(src){ $("lbImg").src = src; $("lightbox").classList.remove("hidden"); }
+$("lightbox").onclick = () => { $("lightbox").classList.add("hidden"); $("lbImg").removeAttribute("src"); };
+
+function renderMsgs(docs){
+  const box = $("msgs");
+  const nearBottom = firstRender || box.scrollHeight - box.scrollTop - box.clientHeight < 180;
+  firstRender = false;
+  box.textContent = "";
+  let lastDay = "";
+  for (const d of docs){
+    const m = d.data(), mine = m.uid === myUid;
+    const when = m.createdAt?.toDate?.() ?? new Date();
+    const label = dayLabel(when);
+    if (label !== lastDay){
+      const sep = document.createElement("div"); sep.className = "day"; sep.textContent = label;
+      box.append(sep); lastDay = label;
+    }
+    const okImg = typeof m.img === "string" && m.img.startsWith(IMG_PREFIX);
+    const el = document.createElement("div");
+    el.className = "msg" + (mine ? " mine" : "") + (okImg ? " has-img" : "");
+    if (okImg){
+      const im = document.createElement("img");
+      im.src = m.img; im.alt = "Foto enviada"; im.loading = "lazy";
+      im.onclick = e => { e.stopPropagation(); openLightbox(m.img); };
+      el.append(im);
+    }
+    if (m.text){
+      const t = document.createElement("div"); t.className = "txt"; t.textContent = m.text;
+      el.append(t);
+    }
+    const meta = document.createElement("small"); meta.textContent = fmtTime(when);
+    el.append(meta);
+    if (mine){
+      const act = document.createElement("div"); act.className = "actions";
+      const del = document.createElement("button"); del.className = "del"; del.textContent = "Apagar mensagem";
+      del.onclick = e => { e.stopPropagation(); if (confirm("Apagar esta mensagem?")) deleteDoc(d.ref); };
+      act.append(del); el.append(act);
+      el.onclick = () => el.classList.toggle("open");
+    }
+    box.append(el);
+  }
+  if (nearBottom) box.scrollTop = box.scrollHeight;
+}
+
+async function postMessage(chat, fields, preview){
+  await addDoc(collection(db, "chats", chat.id, "messages"),
+    { from: me, uid: myUid, ...fields, createdAt: serverTimestamp() });
+  await setDoc(doc(db, "chats", chat.id), {
+    members: [myUid, chat.otherUid].sort(),
+    names: { [myUid]: me, [chat.otherUid]: chat.other },
+    updatedAt: serverTimestamp(), lastText: preview
+  }, { merge: true });
+}
+
+async function send(){
+  const text = $("text").value.trim();
+  if (!text || !currentChat || currentChat.dead) return;
+  $("text").value = "";
+  try { await postMessage(currentChat, { text }, text.slice(0, 80)); }
+  catch { $("text").value = text; alert("Não foi possível enviar. Tente novamente."); }
+}
+$("btnSend").onclick = send;
+$("text").addEventListener("keydown", e => { if (e.key === "Enter") send(); });
+
+/* ---------- fotos ---------- */
+async function compressImage(file){
+  const bmp = await createImageBitmap(file);
+  const scale = Math.min(1, 1280 / Math.max(bmp.width, bmp.height));
+  const w = Math.round(bmp.width * scale), h = Math.round(bmp.height * scale);
+  const c = document.createElement("canvas"); c.width = w; c.height = h;
+  c.getContext("2d").drawImage(bmp, 0, 0, w, h);
+  let q = 0.75, data = c.toDataURL("image/jpeg", q);
+  while (data.length > IMG_MAX_CHARS && q > 0.3){ q -= 0.1; data = c.toDataURL("image/jpeg", q); }
+  if (data.length > IMG_MAX_CHARS) throw new Error("grande");
+  return data;
+}
+$("btnPhoto").onclick = () => $("file").click();
+$("file").onchange = async e => {
+  const f = e.target.files[0]; e.target.value = "";
+  if (!f || !currentChat || currentChat.dead) return;
+  if (!f.type.startsWith("image/")) { alert("Só é possível enviar imagens."); return; }
+  const chat = currentChat, btn = $("btnPhoto");
+  btn.disabled = true; btn.classList.add("busy");
+  try { await postMessage(chat, { text: "", img: await compressImage(f) }, "Foto"); }
+  catch { alert("Não foi possível enviar a foto."); }
+  finally { btn.disabled = false; btn.classList.remove("busy"); }
+};
+
+/* ---------- foto de perfil ---------- */
+async function makeAvatar(file){
+  const bmp = await createImageBitmap(file);
+  const s = Math.min(bmp.width, bmp.height), sx = (bmp.width - s) / 2, sy = (bmp.height - s) / 2;
+  const c = document.createElement("canvas"); c.width = c.height = 256;
+  c.getContext("2d").drawImage(bmp, sx, sy, s, s, 0, 0, 256, 256);
+  let q = 0.8, d = c.toDataURL("image/jpeg", q);
+  while (d.length > 90000 && q > 0.4){ q -= 0.1; d = c.toDataURL("image/jpeg", q); }
+  return d;
+}
+function refreshProfile(){
+  setAvatar($("profAv"), me, myPhoto);
+  $("profName").textContent = "@" + me;
+  $("btnRemovePhoto").classList.toggle("hidden", !myPhoto);
+  $("profErr").textContent = "";
+}
+function openProfile(){ closeSheets(); refreshProfile(); openSheet("sheetProfile"); }
+$("meAv").onclick = openProfile;
+$("btnProfile").onclick = openProfile;
+$("roomAv").onclick = () => { if (roomPhoto) openLightbox(roomPhoto); };
+$("profAv").onclick = () => { if (myPhoto) openLightbox(myPhoto); };
+$("profBadge").onclick = $("btnChangePhoto").onclick = () => $("avatarFile").click();
+$("avatarFile").onchange = async e => {
+  const f = e.target.files[0]; e.target.value = "";
+  if (!f) return;
+  if (!f.type.startsWith("image/")) { $("profErr").textContent = "Escolha uma imagem."; return; }
+  const b = $("btnChangePhoto"); b.disabled = true; b.textContent = "Salvando...";
+  try {
+    const photo = await makeAvatar(f);
+    await setDoc(doc(db, "users", me), { photo }, { merge: true });
+    myPhoto = photo; photoCache.set(me, { uid: myUid, photo });
+    setAvatar($("meAv"), me, photo); refreshProfile();
+  } catch { $("profErr").textContent = "Não foi possível salvar a foto."; }
+  finally { b.disabled = false; b.textContent = "Alterar foto"; }
+};
+$("btnRemovePhoto").onclick = async () => {
+  try {
+    await updateDoc(doc(db, "users", me), { photo: deleteField() });
+    myPhoto = null; photoCache.set(me, { uid: myUid, photo: null });
+    setAvatar($("meAv"), me); refreshProfile();
+  } catch { $("profErr").textContent = "Não foi possível remover a foto."; }
+};
+
+/* ---------- menu, sair e excluir conta ---------- */
+$("btnMenu").onclick = () => openSheet("sheetMenu");
+$("btnOut").onclick = () => signOut(auth);
+$("btnAskDel").onclick = () => { closeSheets(); $("delPass").value = ""; $("delErr").textContent = ""; openSheet("sheetDel", "delPass"); };
+$("btnDelCancel").onclick = closeSheets;
+
+async function deleteAccount(){
+  const pass = $("delPass").value;
+  if (!pass) { $("delErr").textContent = "Digite sua senha para confirmar."; return; }
+  const btn = $("btnDelConfirm"); btn.disabled = true; btn.textContent = "Excluindo...";
+  $("delErr").textContent = "";
+  try {
+    const user = auth.currentUser;
+    await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, pass));
+    unsubList?.(); unsubMsgs?.();
+    // 1) apaga as mensagens que eu enviei, em todas as minhas conversas
+    const chats = await getDocs(query(collection(db, "chats"), where("members", "array-contains", myUid)));
+    for (const c of chats.docs){
+      const ms = await getDocs(query(collection(db, "chats", c.id, "messages"), where("uid", "==", myUid)));
+      for (let i = 0; i < ms.docs.length; i += 400){
+        const b = writeBatch(db);
+        ms.docs.slice(i, i + 400).forEach(d => b.delete(d.ref));
+        await b.commit();
+      }
+    }
+    // 2) apaga o registro do nick e, por fim, a conta
+    await deleteDoc(doc(db, "users", me));
+    await deleteUser(user);
+  } catch (e) {
+    const c = e.code || "";
+    $("delErr").textContent = (c.includes("wrong-password") || c.includes("invalid-credential"))
+      ? "Senha incorreta." : "Não foi possível excluir. Tente novamente.";
+  } finally { btn.disabled = false; btn.textContent = "Excluir"; }
+}
+$("btnDelConfirm").onclick = deleteAccount;
+$("delPass").addEventListener("keydown", e => { if (e.key === "Enter") deleteAccount(); });
+</script>
+</body>
+</html>
