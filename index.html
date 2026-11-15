@@ -100,7 +100,12 @@ button.av{cursor:pointer;padding:0}
 .msg.has-img{width:min(78%,300px);padding:5px}
 .msg.has-img .txt{padding:4px 8px 0}
 .msg img{display:block;width:100%;height:auto;border-radius:16px;cursor:zoom-in}
-.msg small{display:block;font-size:11px;opacity:.6;margin-top:3px;text-align:right}
+.msg small{display:block;font-size:11px;margin-top:3px;text-align:right}
+.msg small .tm{opacity:.6}
+.ticks{margin-left:6px;font-size:12px;letter-spacing:-2px;opacity:.55}
+.ticks.read{opacity:1;color:#1E7BFF;font-weight:700}
+#roomStatus{min-height:16px}
+.sub.live{color:var(--accent)}
 .msg.has-img small{padding:0 8px 3px}
 .msg .actions{display:none;margin-top:6px}
 .msg.open .actions{display:flex}
@@ -184,7 +189,7 @@ button.av{cursor:pointer;padding:0}
     <header class="top">
       <button id="btnBack" class="icon-btn" aria-label="Voltar"><svg class="ic"><use href="#i-back"/></svg></button>
       <button id="roomAv" class="av sm" aria-label="Foto do contato"></button>
-      <div class="grow"><h1 id="roomName"></h1></div>
+      <div class="grow"><h1 id="roomName"></h1><p id="roomStatus" class="sub"></p></div>
       <button id="btnRoomMenu" class="icon-btn" aria-label="Opções da conversa"><svg class="ic dots"><use href="#i-dots"/></svg></button>
     </header>
     <div id="msgs" aria-live="polite"></div>
@@ -213,6 +218,7 @@ button.av{cursor:pointer;padding:0}
     <div class="sheet" role="dialog" aria-label="Menu">
       <h2 id="menuTitle"></h2>
       <button id="btnProfile" class="menu-item">Foto de perfil</button>
+      <button id="btnNotif" class="menu-item">Notificações</button>
       <button id="btnOut" class="menu-item">Sair da conta</button>
       <button id="btnAskDel" class="menu-item danger">Excluir conta</button>
     </div>
@@ -288,6 +294,7 @@ const EMAIL_DOMAIN = "@nick.app";
 const NICK_RE = /^[a-z0-9_]{3,20}$/;
 const IMG_PREFIX = "data:image/jpeg;base64,";
 const IMG_MAX_CHARS = 850000;
+const ONLINE_MS = 90000, BEAT_MS = 40000, TYPING_MS = 6000;
 const RETENTION_DAYS = 14;   // dias que uma conversa apagada "para todos" fica guardada antes de sumir de vez
 
 let me = null, myUid = null, unsubList = null, unsubMsgs = null, currentChat = null, firstRender = true;
@@ -387,7 +394,7 @@ onAuthStateChanged(auth, user => {
   unsubList?.(); unsubMsgs?.(); currentChat = null; closeSheets();
   $("pass").value = "";
   photoCache.clear(); myPhoto = null;
-  if (!user) { me = null; myUid = null; show("login"); return; }
+  if (!user) { stopBeat(); me = null; myUid = null; show("login"); return; }
   me = user.email.split("@")[0]; myUid = user.uid;
   $("whoami").textContent = "@" + me;
   $("menuTitle").textContent = "@" + me;
@@ -399,8 +406,18 @@ onAuthStateChanged(auth, user => {
     setAvatar($("meAv"), me, myPhoto);
   }).catch(() => {});
   show("home");
+  startBeat();
   const q = query(collection(db, "chats"), where("members", "array-contains", myUid));
+  const seen = new Map(); let firstList = true;
   unsubList = onSnapshot(q, snap => {
+    snap.docChanges().forEach(ch => {
+      if (ch.type === "removed") return;
+      const d = ch.doc.data(), u = d.updatedAt?.toMillis?.();
+      if (!u || u <= (seen.get(ch.doc.id) || 0)) return;
+      seen.set(ch.doc.id, u);
+      if (!firstList && d.lastFrom && d.lastFrom !== myUid && !ch.doc.metadata.hasPendingWrites) discreetNotify();
+    });
+    firstList = false;
     const items = snap.docs.map(d => ({ id: d.id, ...d.data() }))
       .sort((a, b) => (b.updatedAt?.seconds ?? 9e12) - (a.updatedAt?.seconds ?? 9e12));
     renderList(items);
@@ -458,9 +475,14 @@ $("otherNick").addEventListener("keydown", e => { if (e.key === "Enter") startCh
 
 /* ---------- conversa aberta ---------- */
 function openChat(otherNick, otherUid){
-  const chat = { id: [myUid, otherUid].sort().join("__"), other: otherNick, otherUid };
+  const chat = { id: [myUid, otherUid].sort().join("__"), other: otherNick, otherUid,
+    cleanups: [], data: null, exists: false, docs: [], presence: null,
+    myReadSent: 0, otherReadSeen: 0, lastIncoming: 0, typingTimer: null };
+  unsubMsgs?.();
   currentChat = chat; firstRender = true;
+  unsubMsgs = () => { chat.cleanups.forEach(f => { try { f(); } catch {} }); chat.cleanups = []; clearTimeout(chat.typingTimer); };
   $("roomName").textContent = otherNick;
+  $("roomStatus").textContent = ""; $("roomStatus").classList.remove("live");
   setAvatar($("roomAv"), otherNick); roomPhoto = null;
   getPhoto(otherNick, otherUid).then(p => {
     if (currentChat !== chat) return;
@@ -470,14 +492,42 @@ function openChat(otherNick, otherUid){
   $("deadBanner").classList.add("hidden");
   $("composer").classList.remove("hidden");
   show("room");
-  unsubMsgs?.();
-  getDoc(doc(db, "chats", chat.id)).then(s => s.exists() ? (s.data().clearedAt?.[myUid] || null) : null).catch(() => null).then(cleared => {
+
+  const chatRef = doc(db, "chats", chat.id);
+  // documento da conversa: "digitando" e "lido"
+  chat.cleanups.push(onSnapshot(chatRef, s => {
+    if (currentChat !== chat) return;
+    chat.exists = s.exists(); chat.data = s.exists() ? s.data() : null;
+    const typingTs = chat.data?.typing?.[otherUid]?.toMillis?.();
+    clearTimeout(chat.typingTimer);
+    if (typingTs){
+      const left = TYPING_MS - (Date.now() - typingTs);
+      if (left > 0) chat.typingTimer = setTimeout(updateStatus, left + 300);
+    }
+    updateStatus();
+    const rd = chat.data?.lastRead?.[otherUid]?.toMillis?.() || 0;
+    if (rd !== chat.otherReadSeen){ chat.otherReadSeen = rd; if (chat.docs.length) renderMsgs(chat.docs); }
+    markRead();
+  }, () => {}));
+  // presença da outra pessoa (online / visto por último)
+  chat.cleanups.push(onSnapshot(doc(db, "presence", otherUid), s => {
+    chat.presence = s.exists() ? s.data() : null; updateStatus();
+  }, () => {}));
+  const tick = setInterval(updateStatus, 15000);
+  chat.cleanups.push(() => clearInterval(tick));
+
+  // mensagens (só as de depois do "apagar para mim")
+  getDoc(chatRef).then(s => s.exists() ? (s.data().clearedAt?.[myUid] || null) : null).catch(() => null).then(cleared => {
     if (currentChat !== chat) return;
     const col = collection(db, "chats", chat.id, "messages");
     const q = cleared
       ? query(col, where("createdAt", ">", cleared), orderBy("createdAt", "desc"), limit(100))
       : query(col, orderBy("createdAt", "desc"), limit(100));
-    unsubMsgs = onSnapshot(q, snap => renderMsgs(snap.docs.slice().reverse()), () => {});
+    chat.cleanups.push(onSnapshot(q, { includeMetadataChanges: true }, snap => {
+      if (currentChat !== chat) return;
+      chat.docs = snap.docs.slice().reverse();
+      renderMsgs(chat.docs);
+    }, () => {}));
   });
   // se a conta da outra pessoa foi excluída (ou o nick foi reaproveitado), deixa só leitura
   getDoc(doc(db, "users", otherNick)).then(s => {
@@ -486,6 +536,7 @@ function openChat(otherNick, otherUid){
       chat.dead = true;
       $("deadBanner").classList.remove("hidden");
       $("composer").classList.add("hidden");
+      updateStatus();
     } else $("text").focus();
   }).catch(() => {});
 }
@@ -499,10 +550,14 @@ function renderMsgs(docs){
   const nearBottom = firstRender || box.scrollHeight - box.scrollTop - box.clientHeight < 180;
   firstRender = false;
   box.textContent = "";
+  const chat = currentChat; if (!chat) return;
+  const otherRead = chat.data?.lastRead?.[chat.otherUid]?.toMillis?.() || 0;
+  let lastIncoming = 0;
   let lastDay = "";
   for (const d of docs){
     const m = d.data(), mine = m.uid === myUid;
     const when = m.createdAt?.toDate?.() ?? new Date();
+    if (!mine){ const t = m.createdAt?.toMillis?.(); if (t && t > lastIncoming) lastIncoming = t; }
     const label = dayLabel(when);
     if (label !== lastDay){
       const sep = document.createElement("div"); sep.className = "day"; sep.textContent = label;
@@ -521,7 +576,17 @@ function renderMsgs(docs){
       const t = document.createElement("div"); t.className = "txt"; t.textContent = m.text;
       el.append(t);
     }
-    const meta = document.createElement("small"); meta.textContent = fmtTime(when);
+    const meta = document.createElement("small");
+    const tm = document.createElement("span"); tm.className = "tm"; tm.textContent = fmtTime(when);
+    meta.append(tm);
+    if (mine){
+      const t = m.createdAt?.toMillis?.();
+      const tk = document.createElement("span");
+      if (d.metadata.hasPendingWrites || !t){ tk.className = "ticks"; tk.textContent = "…"; }
+      else if (t <= otherRead){ tk.className = "ticks read"; tk.textContent = "✓✓"; }
+      else { tk.className = "ticks"; tk.textContent = "✓"; }
+      meta.append(tk);
+    }
     el.append(meta);
     if (mine){
       const act = document.createElement("div"); act.className = "actions";
@@ -533,7 +598,106 @@ function renderMsgs(docs){
     box.append(el);
   }
   if (nearBottom) box.scrollTop = box.scrollHeight;
+  chat.lastIncoming = lastIncoming; markRead();
 }
+
+/* ---------- notificações discretas (sem nome nem conteúdo) ---------- */
+const lsGet = k => { try { return localStorage.getItem(k); } catch { return null; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
+let swReg = null, pendingNotif = 0;
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").then(r => { swReg = r; }).catch(() => {});
+const notifSupported = () => "Notification" in window && "serviceWorker" in navigator;
+const notifOn = () => notifSupported() && lsGet("notif") === "1" && Notification.permission === "granted";
+async function discreetNotify(){
+  if (!notifOn() || document.visibilityState === "visible") return;
+  pendingNotif++;
+  try {
+    const reg = swReg || await navigator.serviceWorker.ready;
+    await reg.showNotification("Darkc", {
+      body: pendingNotif === 1 ? "1 notificação" : `${pendingNotif} notificações`,
+      tag: "darkc", renotify: true
+    });
+  } catch {}
+}
+function clearNotifs(){
+  pendingNotif = 0;
+  if (!notifSupported()) return;
+  navigator.serviceWorker.getRegistration()
+    .then(r => r && r.getNotifications({ tag: "darkc" }).then(ns => ns.forEach(n => n.close())))
+    .catch(() => {});
+}
+function refreshNotifBtn(){
+  const b = $("btnNotif");
+  if (!notifSupported()){ b.textContent = "Notificações indisponíveis neste navegador"; b.disabled = true; return; }
+  b.textContent = notifOn() ? "Desativar notificações" : "Ativar notificações";
+}
+$("btnNotif").onclick = async () => {
+  if (notifOn()){ lsSet("notif", "0"); refreshNotifBtn(); return; }
+  let perm = Notification.permission;
+  if (perm === "default") perm = await Notification.requestPermission();
+  if (perm === "granted"){
+    lsSet("notif", "1");
+    try {
+      const reg = swReg || await navigator.serviceWorker.ready;
+      await reg.showNotification("Darkc", { body: "Notificações ativadas", tag: "darkc-teste" });
+    } catch {}
+  } else alert("Para ativar, permita as notificações deste site nas configurações do navegador.");
+  refreshNotifBtn();
+};
+
+/* ---------- presença, digitando e lido ---------- */
+let beatTimer = null;
+function beat(online = true){
+  if (!myUid) return;
+  setDoc(doc(db, "presence", myUid), { lastSeen: serverTimestamp(), online }).catch(() => {});
+}
+function startBeat(){
+  stopBeat(); beat(true);
+  beatTimer = setInterval(() => { if (document.visibilityState === "visible") beat(true); }, BEAT_MS);
+}
+function stopBeat(){ clearInterval(beatTimer); beatTimer = null; }
+document.addEventListener("visibilitychange", () => {
+  if (!myUid) return;
+  if (document.visibilityState === "visible"){ beat(true); markRead(); clearNotifs(); } else beat(false);
+});
+window.addEventListener("pagehide", () => beat(false));
+
+function touchChat(chat, fields){
+  return setDoc(doc(db, "chats", chat.id), {
+    members: [myUid, chat.otherUid].sort(),
+    names: { [myUid]: me, [chat.otherUid]: chat.other },
+    ...fields
+  }, { merge: true });
+}
+function updateStatus(){
+  const chat = currentChat; if (!chat) return;
+  const el = $("roomStatus");
+  const set = (txt, live) => { el.textContent = txt; el.classList.toggle("live", !!live); };
+  if (chat.dead) return set("", false);
+  const typingTs = chat.data?.typing?.[chat.otherUid]?.toMillis?.();
+  if (typingTs && Date.now() - typingTs < TYPING_MS) return set("digitando…", true);
+  const p = chat.presence, ls = p?.lastSeen?.toDate?.();
+  if (!ls) return set("", false);
+  if (p.online && Date.now() - ls.getTime() < ONLINE_MS) return set("online", true);
+  const t = fmtTime(ls);
+  set(same(ls, new Date()) ? `saiu às ${t}` : `saiu ${dayLabel(ls).toLowerCase()} às ${t}`, false);
+}
+function markRead(){
+  const chat = currentChat;
+  if (!chat || chat.dead || !chat.exists || document.visibilityState !== "visible") return;
+  const newest = chat.lastIncoming || 0;
+  const myRead = chat.data?.lastRead?.[myUid]?.toMillis?.() || 0;
+  if (!newest || newest <= myRead || newest <= chat.myReadSent) return;
+  chat.myReadSent = newest;
+  touchChat(chat, { lastRead: { [myUid]: serverTimestamp() } }).catch(() => { chat.myReadSent = 0; });
+}
+let lastTypingWrite = 0;
+$("text").addEventListener("input", () => {
+  const chat = currentChat;
+  if (!chat || chat.dead || !chat.exists || !$("text").value) return;
+  const t = Date.now(); if (t - lastTypingWrite < 3000) return; lastTypingWrite = t;
+  touchChat(chat, { typing: { [myUid]: serverTimestamp() } }).catch(() => {});
+});
 
 async function postMessage(chat, fields, preview){
   await addDoc(collection(db, "chats", chat.id, "messages"),
@@ -541,7 +705,8 @@ async function postMessage(chat, fields, preview){
   await setDoc(doc(db, "chats", chat.id), {
     members: [myUid, chat.otherUid].sort(),
     names: { [myUid]: me, [chat.otherUid]: chat.other },
-    updatedAt: serverTimestamp(), lastText: preview
+    updatedAt: serverTimestamp(), lastText: preview, lastFrom: myUid,
+    typing: { [myUid]: deleteField() }
   }, { merge: true });
 }
 
@@ -666,8 +831,12 @@ $("btnRemovePhoto").onclick = async () => {
 };
 
 /* ---------- menu, sair e excluir conta ---------- */
-$("btnMenu").onclick = () => openSheet("sheetMenu");
-$("btnOut").onclick = () => signOut(auth);
+$("btnMenu").onclick = () => { refreshNotifBtn(); openSheet("sheetMenu"); };
+$("btnOut").onclick = async () => {
+  stopBeat();
+  try { await setDoc(doc(db, "presence", myUid), { lastSeen: serverTimestamp(), online: false }); } catch {}
+  signOut(auth);
+};
 $("btnAskDel").onclick = () => { closeSheets(); $("delPass").value = ""; $("delErr").textContent = ""; openSheet("sheetDel", "delPass"); };
 $("btnDelCancel").onclick = closeSheets;
 
@@ -679,7 +848,7 @@ async function deleteAccount(){
   try {
     const user = auth.currentUser;
     await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, pass));
-    unsubList?.(); unsubMsgs?.();
+    unsubList?.(); unsubMsgs?.(); stopBeat();
     // 1) apaga as mensagens que eu enviei, em todas as minhas conversas
     const chats = await getDocs(query(collection(db, "chats"), where("members", "array-contains", myUid)));
     for (const c of chats.docs){
@@ -691,6 +860,7 @@ async function deleteAccount(){
       }
     }
     // 2) apaga o registro do nick e, por fim, a conta
+    await deleteDoc(doc(db, "presence", myUid)).catch(() => {});
     await deleteDoc(doc(db, "users", me));
     await deleteUser(user);
   } catch (e) {
