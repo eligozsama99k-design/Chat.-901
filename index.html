@@ -492,6 +492,7 @@ function openChat(otherNick, otherUid){
   $("deadBanner").classList.add("hidden");
   $("composer").classList.remove("hidden");
   show("room");
+  $("text").focus();
 
   const chatRef = doc(db, "chats", chat.id);
   // documento da conversa: "digitando" e "lido"
@@ -537,10 +538,11 @@ function openChat(otherNick, otherUid){
       $("deadBanner").classList.remove("hidden");
       $("composer").classList.add("hidden");
       updateStatus();
-    } else $("text").focus();
+    }
   }).catch(() => {});
 }
-$("btnBack").onclick = () => { unsubMsgs?.(); currentChat = null; show("home"); };
+function leaveRoom(){ unsubMsgs?.(); currentChat = null; $("text").blur(); show("home"); }
+$("btnBack").onclick = leaveRoom;
 
 function openLightbox(src){ $("lbImg").src = src; $("lightbox").classList.remove("hidden"); }
 $("lightbox").onclick = () => { $("lightbox").classList.add("hidden"); $("lbImg").removeAttribute("src"); };
@@ -601,6 +603,28 @@ function renderMsgs(docs){
   chat.lastIncoming = lastIncoming; markRead();
 }
 
+/* ---------- botão "voltar" do celular ---------- */
+// mantém sempre uma entrada de reserva no histórico: o "voltar" fecha foto/janela, depois sai da conversa
+history.replaceState({ base: 1 }, "");
+history.pushState({ app: 1 }, "");
+window.addEventListener("popstate", () => {
+  if (!$("lightbox").classList.contains("hidden")) $("lightbox").click();
+  else if (document.querySelector(".sheet-wrap:not(.hidden)")) closeSheets();
+  else if (!$("room").classList.contains("hidden")) leaveRoom();
+  else { history.back(); return; }          // lista de conversas ou login: deixa sair do site
+  history.pushState({ app: 1 }, "");        // repõe a entrada de reserva
+});
+
+/* ---------- teclado: ao fechar, tira o foco do campo (ele só reabre se você tocar nele) ---------- */
+if (window.visualViewport){
+  let kbOpen = false;
+  window.visualViewport.addEventListener("resize", () => {
+    const open = window.visualViewport.height < window.innerHeight - 120;
+    if (kbOpen && !open && document.activeElement === $("text")) $("text").blur();
+    kbOpen = open;
+  });
+}
+
 /* ---------- notificações discretas (sem nome nem conteúdo) ---------- */
 const lsGet = k => { try { return localStorage.getItem(k); } catch { return null; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
@@ -644,6 +668,21 @@ $("btnNotif").onclick = async () => {
   } else alert("Para ativar, permita as notificações deste site nas configurações do navegador.");
   refreshNotifBtn();
 };
+
+// pede a permissão logo no primeiro toque ao abrir o site (os navegadores exigem um toque do usuário)
+function armNotifAsk(){
+  if (!notifSupported()) return;
+  if (Notification.permission === "granted"){ if (lsGet("notif") === null) lsSet("notif", "1"); return; }
+  if (Notification.permission !== "default" || lsGet("notifAsked") === "1") return;
+  const ask = async () => {
+    document.removeEventListener("click", ask, true);
+    lsSet("notifAsked", "1");
+    try { if (await Notification.requestPermission() === "granted") lsSet("notif", "1"); } catch {}
+    refreshNotifBtn();
+  };
+  document.addEventListener("click", ask, true);
+}
+armNotifAsk();
 
 /* ---------- presença, digitando e lido ---------- */
 let beatTimer = null;
