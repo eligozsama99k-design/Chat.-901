@@ -641,8 +641,6 @@ OneSignalDeferred.push(async OneSignal => {
   try {
     await OneSignal.init({
       appId: ONESIGNAL_APP_ID,
-      serviceWorkerPath: BASE.slice(1) + "sw.js",
-      serviceWorkerParam: { scope: BASE },
       notifyButton: { enable: false },
       allowLocalhostAsSecureOrigin: true
     });
@@ -663,8 +661,8 @@ const notifOn = () => !!OS && OS.Notifications.permission === true && OS.User.Pu
 
 function clearNotifs(){
   if (!notifSupported()) return;
-  navigator.serviceWorker.getRegistration(BASE)
-    .then(r => r && r.getNotifications().then(ns => ns.forEach(n => n.close())))
+  navigator.serviceWorker.getRegistrations()
+    .then(rs => rs.forEach(r => r.getNotifications().then(ns => ns.forEach(n => n.close()))))
     .catch(() => {});
 }
 function refreshNotifBtn(){
