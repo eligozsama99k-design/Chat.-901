@@ -787,6 +787,8 @@ async function send(){
   catch { $("text").value = text; alert("Não foi possível enviar. Tente novamente."); }
 }
 $("btnSend").onclick = send;
+// tocar em enviar não tira o foco do campo: o teclado continua aberto (se estava aberto) e fica oculto (se você tinha fechado)
+["pointerdown", "mousedown", "touchstart"].forEach(ev => $("btnSend").addEventListener(ev, e => e.preventDefault(), { passive: false }));
 $("text").addEventListener("keydown", e => { if (e.key === "Enter") send(); });
 
 /* ---------- fotos ---------- */
