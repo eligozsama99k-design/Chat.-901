@@ -654,8 +654,9 @@ OneSignalDeferred.push(async OneSignal => {
     if (myUid) OS.login(myUid);
     refreshNotifBtn();
     if (DEBUG) setTimeout(() => alert("OneSignal: permissao=" + OS.Notifications.permission + " | inscrito=" + OS.User.PushSubscription.optedIn + " | id externo=" + OS.User.externalId), 5000);
-  } catch {}
+  } catch (e) { if (DEBUG) alert("Erro ao iniciar OneSignal: " + (e && e.message ? e.message : e)); }
 });
+if (DEBUG) setTimeout(() => { if (!OS) alert("OneSignal nao iniciou. SDK carregado? " + (typeof window.OneSignal !== "undefined") + " | origem: " + location.origin); }, 8000);
 
 const notifSupported = () => "Notification" in window && "serviceWorker" in navigator;
 const notifOn = () => !!OS && OS.Notifications.permission === true && OS.User.PushSubscription.optedIn === true;
