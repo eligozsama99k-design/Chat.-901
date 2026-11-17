@@ -629,6 +629,7 @@ if (window.visualViewport){
 }
 
 /* ---------- notificações push (OneSignal + Cloudflare Worker) ---------- */
+const DEBUG = location.search.includes("debug");   // abra o site com ?debug para diagnóstico
 const PUSH_URL = "https://darkc-push.eligozsama99k.workers.dev";
 const ONESIGNAL_APP_ID = "67660941-9892-4d3d-a22a-536a15409730";
 const BASE = location.pathname.replace(/[^/]*$/, "");   // "/" ou "/nome-do-repo/"
@@ -652,6 +653,7 @@ OneSignalDeferred.push(async OneSignal => {
     OS = OneSignal;
     if (myUid) OS.login(myUid);
     refreshNotifBtn();
+    if (DEBUG) setTimeout(() => alert("OneSignal: permissao=" + OS.Notifications.permission + " | inscrito=" + OS.User.PushSubscription.optedIn + " | id externo=" + OS.User.externalId), 5000);
   } catch {}
 });
 
@@ -701,13 +703,15 @@ armNotifAsk();
 async function pushOther(chat){
   try {
     const token = await auth.currentUser.getIdToken();
-    fetch(PUSH_URL, {
+    const p = fetch(PUSH_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
       body: JSON.stringify({ chatId: chat.id }),
       keepalive: true
-    }).catch(() => {});
-  } catch {}
+    });
+    if (DEBUG) { const r = await p; alert("Worker respondeu: " + r.status + " " + await r.text()); }
+    else p.catch(() => {});
+  } catch (e) { if (DEBUG) alert("Falha ao chamar o Worker: " + e); }
 }
 
 /* ---------- presença, digitando e lido ---------- */
